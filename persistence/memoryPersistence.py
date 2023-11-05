@@ -17,4 +17,5 @@ class MemoryPersistence(BaseModel):
             return ""
         return "".join(self.log[uniqueId])
     def removeLog(self,uniqueId:str):
-        self.log.pop(uniqueId)
+        if uniqueId in self.log:
+            self.log.pop(uniqueId)

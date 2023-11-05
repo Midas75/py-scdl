@@ -1,19 +1,12 @@
-import requests
 import sys
 from typing import TextIO
-from object.instance import Instance
-from object.serverConfig import ServerConfig
-import asyncio
-from client import Client
+from ILog import ILog
 
 
-class LogInterceptor(Client):
-    original_stdout: TextIO
-    client: Client
-
-    def __init__(self, client: Client, original_stdout: TextIO = sys.stdout):
+class LogInterceptor:
+    def __init__(self, target: ILog, original_stdout: TextIO = sys.stdout):
         self.original_stdout = original_stdout
-        self.client = client
+        self.target = target
         sys.stdout = self
 
     def __del__(self):
@@ -23,9 +16,7 @@ class LogInterceptor(Client):
         sys.stdout = self.original_stdout
 
     def write(self, message):
-        asyncio.run(
-            self.client.log(message)
-        )
+        self.target.doLog(message)
         return self.original_stdout.write(message)
 
     def flush(self) -> None:
