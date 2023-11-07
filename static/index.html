@@ -4,14 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <link rel="stylesheet" href="./jsoneditor.min.css" />
+    <script src="./jsoneditor.min.js"></script>
 </head>
 
 <body>
     <input id="uid">
     <button id="getLog">get</button>
+    <div id="log" style="overflow: scroll;border: solid;height: 80vh;white-space: pre;"></div>
     <div id="buttons"></div>
     <div id="log" style="overflow: scroll;border: solid;height: 80vh;white-space: pre;"></div>
     <script>
+        const editor = new JSONEditor(container, options)
         function getLog(uid) {
             uid = uid ?? document.getElementById("uid").value
             let xhr = new XMLHttpRequest();
@@ -20,9 +24,9 @@
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
                         let log = JSON.parse(xhr.response).data.replace(/\n/g, "<br>")
-                        let div=document.getElementById("log")
+                        let div = document.getElementById("log")
                         div.innerHTML = log
-                        div.scrollTop=div.scrollHeight
+                        div.scrollTop = div.scrollHeight
                     }
                 }
             }
@@ -37,13 +41,13 @@
             xhr.onreadystatechange = (e) => {
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
-                        let div=document.getElementById("buttons")
-                        div.innerHTML=""
-                        let items=JSON.parse(xhr.response).data
-                        for(const item of items){
-                            let b=document.createElement("button")
-                            b.innerText=item
-                            b.addEventListener("click",(e)=>{
+                        let div = document.getElementById("buttons")
+                        div.innerHTML = ""
+                        let items = JSON.parse(xhr.response).data
+                        for (const item of items) {
+                            let b = document.createElement("button")
+                            b.innerText = item
+                            b.addEventListener("click", (e) => {
                                 getLog(b.innerText)
                             })
                             div.append(b)

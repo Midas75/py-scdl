@@ -1,0 +1,88 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <select id="configs"></select>
+    <button id="reload">reload</button>
+    <button id="save">save</button>
+    <div id="jsoneditor"></div>
+    <script type="module">
+        import { JSONEditor } from './vanilla-jsoneditor/index.js'
+        const editor = new JSONEditor({
+            target: document.getElementById('jsoneditor'),
+            props: {
+                json: {},
+                mainMenuBar: false,
+                navigationBar: false,
+                readOnly: false,
+                mode: "text"
+            }
+        })
+        function listConfig() {
+            fetch("/config/list")
+                .then(async response => {
+                    let data = (await response.json()).data
+                    let select = document.getElementById("configs")
+                    while (select.options.length > 0) {
+                        select.remove(0)
+                    }
+                    for (let item of data) {
+                        let option = document.createElement("option")
+                        option.value = item
+                        option.text = item
+                        select.add(option)
+                    }
+                }).then(async () => {
+                    await getConfig(document.getElementById("configs").value)
+                })
+        }
+        async function getConfig(firstKey) {
+            await fetch(`/config/get/${firstKey}`)
+                .then(async response => {
+                    let data = (await response.json()).data
+                    let copyData = JSON.parse(JSON.stringify(data))
+                    editor.update({ json: copyData })
+                })
+        }
+        document.getElementById("configs").addEventListener("change", (e) => {
+            getConfig(e.target.value)
+        })
+        document.getElementById("reload").addEventListener("click", (e) => {
+            fetch("/config/reload")
+                .then(async response => {
+                    alert(`reload:${(await response.json()).msg}`)
+                    await listConfig()
+                })
+        })
+        document.getElementById("save").addEventListener("click", (e) => {
+            let validate = editor.validate()
+            if (validate != null) {
+                alert(validate.parseError.message)
+                return
+            }
+            let key = document.getElementById("configs").value
+            let content = editor.get()
+            fetch(`/config/save/${key}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: content.text ?? JSON.stringify(content.json)
+            })
+                .then(async response => {
+                    alert(`save:${(await response.json()).msg}`)
+                    await listConfig()
+                })
+        })
+        listConfig()
+        // getConfig("base")
+    </script>
+
+</body>
+
+</html>
