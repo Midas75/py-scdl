@@ -1,6 +1,8 @@
 class TaskType:
     LOG = 0
     CLOSE = 1
+    ROUTE = 2
+    CONFIG = 3
 
 
 class Task:

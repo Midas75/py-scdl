@@ -2,7 +2,7 @@ from collections import deque
 from pydantic import BaseModel
 class MemoryPersistence(BaseModel):
     log:dict={}
-    maxLogLength:int=2000
+    maxLogLength:int=500
     async def addLog(self,uniqueId:str,message:str):
         buffer:deque=None
         if uniqueId not in self.log:
