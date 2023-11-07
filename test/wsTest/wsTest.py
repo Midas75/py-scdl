@@ -39,7 +39,7 @@ async def writeToQueue():
 async def run():
     session = aiohttp.ClientSession()
     async with session.ws_connect(
-        "ws://192.168.3.4:3100/sws",
+        "ws://192.168.30.61:3100/sws",
         headers={
             "Service-Name": "all",
             "Hostname": "192.168.30.61",

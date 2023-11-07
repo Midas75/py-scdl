@@ -39,7 +39,7 @@ def logout(instance: Instance or str) -> bool:
 
 async def log(instance: Instance, body: dict, websocket: WebSocket) -> None:
     uid = str(instance)
-    print(body["message"])
+    # print(body["message"])
     await persistence.addLog(uid, body["message"])
 
 
@@ -69,9 +69,7 @@ async def websocketEndpoint(websocket: WebSocket):
         login(instance, websocket)
         while True:
             data = await websocket.receive_json()
-            print("comming")
             await wsCallable[data["type"]](instance, data, websocket)
-            print("next")
     except WebSocketDisconnect:
         logout(instance)
 
