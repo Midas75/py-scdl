@@ -65,6 +65,10 @@
                 alert(validate.parseError.message)
                 return
             }
+            let commit = confirm("确定要提交吗？")
+            if (!commit) {
+                return
+            }
             let key = document.getElementById("configs").value
             let content = editor.get()
             fetch(`/config/save/${key}`, {

@@ -22,7 +22,6 @@ class ConfigLoader:
 
     def saveConfig(self, firstKey: str, data: dict):
         path="{}/{}.json".format(self.configPath, firstKey)
-        print(path)
         with open(path, "w") as file:
             json.dump(data, file, indent=4)
         self.loadConfig()

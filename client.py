@@ -172,9 +172,9 @@ if __name__ == "__main__":
     wsClient = WebSocketClient(serverConfig=serverConfig, instance=instance)
     li = LogInterceptor(wsClient)
     while True:
-        print(wsClient.getConfigValueByKeyPath("base"))
+        # print(wsClient.getConfigValueByKeyPath("base"))
         time.sleep(3)
         # wsClient.doRoute()
         # wsClient.doConfig()
-        # print(time.strftime("%H:%M:%S"))
+        print(time.strftime("%H:%M:%S"))
         # wsClient.doLog(time.strftime("%H:%M:%S") + "\n")

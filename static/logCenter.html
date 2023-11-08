@@ -1,0 +1,103 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <!-- <input id="uid" style="visibility: hidden;">
+    <button id="getLog" style="visibility: hidden;">get</button> -->
+    <label> <input type="checkbox" id="auto" /> AutoLogPer5s </label>
+    <div id="buttons"></div>
+    <script>
+        let containers = []
+        let services = []
+        function renderLogItem(number) {
+            for (let i = 0; i < number; i++) {
+                let container = document.createElement("div")
+                container.id = `contaner-${i}`
+                container.style = "display: inline-block;"
+                container.dataset.id = i
+                let select = document.createElement("select")
+                select.id = `select-${i}`
+                select.dataset.id = i
+                select.addEventListener("change", (e) => {
+                    getLog(e.target.value, e.target.dataset.id)
+                })
+                let option = document.createElement("option")
+                option.value = "--"
+                option.text = "--"
+                select.add(option)
+                let refresh = document.createElement("button")
+                refresh.innerText = "refresh"
+                refresh.id = `refresh-${i}`
+                refresh.dataset.id = i
+                refresh.addEventListener("click", (e) => {
+                    getLog(containers[parseInt(e.target.dataset.id)].select.value, e.target.dataset.id)
+                })
+                let log = document.createElement("div")
+                log.style = "overflow: scroll;border: solid;height: 45vh;width:45vw;white-space: pre;"
+                log.id = `log-${i}`
+                log.dataset.id = i
+                container.append(select, refresh, log)
+                document.body.appendChild(container)
+                containers.push({
+                    container: container,
+                    select: select,
+                    refresh: refresh,
+                    log: log
+                })
+            }
+        }
+        function getLog(uid, i) {
+            i = parseInt(i)
+            fetch(`/log/${uid}`)
+                .then(async response => {
+                    let log = (await response.json()).data.replace(/\n/g, "<br>")
+                    containers[i].log.innerHTML = log
+                    containers[i].log.scrollTop = containers[i].log.scrollHeight
+                })
+        }
+        function list() {
+            fetch("/list")
+                .then(async response => {
+                    let data = (await response.json()).data
+                    services = data
+                    renderAllSelect()
+                })
+        }
+        function renderAllSelect() {
+            for (const item of containers) {
+                const select = item.select
+                while (select.options.length > 1) {
+                    select.remove(1)
+                }
+                for (const service of services) {
+                    let option = document.createElement("option")
+                    option.value = service
+                    option.text = service
+                    select.add(option)
+                }
+            }
+        }
+        setInterval(() => {
+            if (!document.getElementById("auto").checked) {
+                return
+            }
+            for (const item of containers) {
+                try {
+                    getLog(item.select.value, item.select.dataset.id)
+                } catch (e) {
+
+                }
+            }
+        }, 5000)
+        renderLogItem(4)
+        list()
+
+    </script>
+</body>
+
+</html>
