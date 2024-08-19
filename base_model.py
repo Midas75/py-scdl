@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from enum import Enum, auto
 
 
 class Instance(BaseModel):

@@ -6,7 +6,7 @@ import sys
 from typing import Callable, Union, Any
 
 sys.path.append(f"{os.path.dirname(__file__)}")
-from base import Instance
+from base_model import Instance
 from persistence import IPersistence, MemoryPersistence
 
 import uvicorn

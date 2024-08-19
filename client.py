@@ -5,12 +5,10 @@ from abc import ABC, abstractmethod
 from threading import Thread, Event
 import asyncio
 import json
-from typing import Union, Coroutine
-from typing import TextIO
-
+from typing import Union, Coroutine, Any, TextIO
 
 sys.path.append(f"{os.path.dirname(__file__)}")
-from base import ServerConfig, Instance
+from base_model import ServerConfig, Instance
 
 
 class ILog(ABC):
@@ -215,13 +213,13 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
 
     def getConfigValueByKeyPath(
         self, keyPath: str, spliter: str = "."
-    ) -> Union[dict, str, None]:
+    ) -> Union[dict, str, Any, None]:
         if not hasattr(self, "config"):
             return None
         paths = keyPath.split(spliter)
         c = self.config
         for path in paths:
-            if path in c and isinstance(c[path], Union[dict, str]):
+            if path in c:
                 c = c[path]
             else:
                 return None
