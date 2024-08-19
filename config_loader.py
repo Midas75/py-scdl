@@ -21,7 +21,7 @@ class ConfigLoader:
                             print(f"Error loading JSON file {file}")
 
     def saveConfig(self, firstKey: str, data: dict):
-        path="{}/{}.json".format(self.configPath, firstKey)
+        path = f"{self.configPath}/{firstKey}.json"
         with open(path, "w") as file:
             json.dump(data, file, indent=4)
         self.loadConfig()

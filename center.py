@@ -1,21 +1,31 @@
 from fastapi import FastAPI, responses
 from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket, WebSocketDisconnect
-from object.Instance import Instance
-from persistence.memoryPersistence import MemoryPersistence
-from typing import Dict, Callable, Set
+import os
+import sys
+from typing import Callable, Union, Any
+
+sys.path.append(f"{os.path.dirname(__file__)}")
+from base import Instance
+from persistence import IPersistence, MemoryPersistence
+
 import uvicorn
-from ConfigLoader import ConfigLoader
-instances: Dict[str, Set[str]] = {}
-unique: Dict[str, Instance] = {}
-wsInstance: Dict[str, WebSocket] = {}
+from config_loader import ConfigLoader
+
+instances: dict[str, set[str]] = {}
+unique: dict[str, Instance] = {}
+wsInstance: dict[str, WebSocket] = {}
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-persistence = MemoryPersistence()
+app.mount(
+    "/static",
+    StaticFiles(directory=f"{os.path.dirname(__file__)}/static"),
+    name="static",
+)
+persistence: IPersistence = MemoryPersistence()
 configLoader = ConfigLoader()
 
 
-def login(instance: Instance, websocket: WebSocket) -> bool:
+async def login(instance: Instance, websocket: WebSocket) -> bool:
     uid = str(instance)
     if uid in unique:
         return False
@@ -28,20 +38,19 @@ def login(instance: Instance, websocket: WebSocket) -> bool:
     return True
 
 
-def logout(instance: Instance or str) -> bool:
+async def logout(instance: Union[Instance, str]) -> bool:
     uid = str(instance)
     if uid not in unique:
         return False
     unique.pop(uid)
     instances[instance.serviceName].remove(uid)
-    persistence.removeLog(uid)
+    await persistence.removeLog(uid)
     wsInstance.pop(uid)
     return True
 
 
 async def log(instance: Instance, body: dict, websocket: WebSocket) -> None:
     uid = str(instance)
-    # print(body["message"])
     await persistence.addLog(uid, body["message"])
 
 
@@ -50,30 +59,25 @@ async def route(instance: Instance, body: dict, websocket: WebSocket) -> None:
     for key in instances:
         result[key] = {}
         for uid in instances[key]:
-            result[key][uid] = unique[uid].dict()
-    payload = {
-        "type": "route",
-        "data": result
-    }
+            result[key][uid] = unique[uid].model_dump()
+    payload = {"type": "route", "data": result}
     await websocket.send_json(payload)
 
 
 async def config(instance: Instance, body: dict, websocket: WebSocket) -> None:
-    payload = {
-        "type": "config",
-        "data": {}
-    }
+    payload = {"type": "config", "data": {}}
     if "config" in body and body["config"] is not None:
         payload["data"][body["config"]] = configLoader.config[body["config"]]
     else:
         payload["data"] = configLoader.config
+    print(payload)
     await websocket.send_json(payload)
 
 
-wsCallable: Dict[str, Callable] = {
+wsCallable: dict[str, Callable[[Instance, dict[str, Any, WebSocket]], None]] = {
     "log": log,
     "route": route,
-    "config": config
+    "config": config,
 }
 
 
@@ -83,15 +87,15 @@ async def websocketEndpoint(websocket: WebSocket):
         instance = Instance(
             serviceName=websocket.headers.get("Service-Name"),
             hostname=websocket.headers.get("Hostname"),
-            port=int(websocket.headers.get("Port"))
+            port=int(websocket.headers.get("Port")),
         )
         await websocket.accept()
-        login(instance, websocket)
+        await login(instance, websocket)
         while True:
             data = await websocket.receive_json()
             await wsCallable[data["type"]](instance, data, websocket)
     except WebSocketDisconnect:
-        logout(instance)
+        await logout(instance)
 
 
 @app.get("/config/reload")
@@ -126,15 +130,13 @@ async def getList():
 
 @app.get("/log/{uid}")
 async def getLog(uid: str):
-    return responses.JSONResponse({"data": persistence.getLog(uid)})
+    return responses.JSONResponse({"data":await persistence.getLog(uid)})
 
 
 @app.delete("/logout/{uid}")
 async def deleteById(uid: str):
-    return responses.JSONResponse({
-        "message": "success" if logout(uid) else "failed"
-    })
+    return responses.JSONResponse({"message": "success" if logout(uid) else "failed"})
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host='0.0.0.0', port=3100)
+    uvicorn.run(app, host="0.0.0.0", port=3100)

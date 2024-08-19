@@ -1,117 +1,167 @@
 import aiohttp
-from object.ServerConfig import ServerConfig
-from object.Instance import Instance
-from object.Task import Task, TaskType
+import os
+import sys
 from abc import ABC, abstractmethod
-from threading import Thread
+from threading import Thread, Event
 import asyncio
-import queue
-import time
-from LogInterceptor import LogInterceptor
-from ILog import ILog
-from IRoute import IRoute
-from IConfig import IConfig
 import json
-from typing import Dict, Union
+from typing import Union, Coroutine
+from typing import TextIO
+
+
+sys.path.append(f"{os.path.dirname(__file__)}")
+from base import ServerConfig, Instance
+
+
+class ILog(ABC):
+    @abstractmethod
+    def doLog(self, data: str):
+        raise NotImplementedError()
+
+
+class IConfig(ABC):
+    @abstractmethod
+    def doConfig(self, firstKey: str):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def getConfig(self) -> dict[str, dict]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def getConfigValueByKeyPath(self, keyPath: str):
+        raise NotImplementedError()
 
 
 class Client(ABC):
     @abstractmethod
     def stop(self):
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def getRoute(self):
-        pass
+        raise NotImplementedError()
+
+
+class IRoute(ABC):
+    @abstractmethod
+    def doRoute(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def getRoute(self) -> dict[str, dict[str, Union[str, int]]]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def getUrl(self, serviceName: str) -> str:
+        raise NotImplementedError()
+
+
+class LogInterceptor:
+    def __init__(self, target: ILog, original_stdout: TextIO = sys.stdout):
+        self.original_stdout = original_stdout
+        self.target = target
+        sys.stdout = self
+
+    def __del__(self):
+        return self.stop()
+
+    def stop(self) -> None:
+        sys.stdout = self.original_stdout
+
+    def write(self, message):
+        self.target.doLog(message)
+        return self.original_stdout.write(message)
+
+    def flush(self) -> None:
+        return self.original_stdout.flush()
 
 
 class WebSocketClient(Client, ILog, IRoute, IConfig):
-    def __init__(self, serverConfig: ServerConfig, instance: Instance, getConfigNow: bool = True):
+    eventQueue: asyncio.Queue[Coroutine]
+    ws: aiohttp.ClientWebSocketResponse
+    onConfigUpdatedEvent: Event
+    onRouteUpdatedEvent: Event
+    onLoopCreatedEvent: Event
+    loop: asyncio.AbstractEventLoop
+
+    def __init__(
+        self, serverConfig: ServerConfig, instance: Instance, getConfigNow: bool = True
+    ):
+        self.eventQueue = asyncio.Queue[Coroutine]()
         self.serverConfig = serverConfig
         self.instance = instance
         self.cacheLog = ""
-        self.running = True
-        self.thread = Thread(target=self._runLoop)
-        self.queue = queue.Queue()
-        self.thread.daemon = True
+        self.running = False
+        self.thread = Thread(target=asyncio.run, args=[self._eventLoop()], daemon=True)
+        self.onConfigUpdatedEvent = Event()
+        self.onRouteUpdatedEvent = Event()
+        self.onLoopCreatedEvent = Event()
         self.thread.start()
+        self.onLoopCreatedEvent.wait()
+
         if getConfigNow:
-            self._blockTillConfigLoaded()
+            self.doConfig()
+            print("waiting for config load")
+            self.onConfigUpdatedEvent.wait()
 
-    def _blockTillConfigLoaded(self):
-        self.doConfig()
-        while not hasattr(self, "config"):
-            print("still not get config,sleep 3s")
-            time.sleep(3)
-
-    def _runLoop(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+    async def _eventLoop(self):
+        self.running = True
+        self.loop = asyncio.get_event_loop()
+        self.onLoopCreatedEvent.set()
         while self.running:
-            self.loop.run_until_complete(self._start())
-            print("websocket exited,trying reconnecting after 10 seconds")
-            time.sleep(10)
-
-    async def _start(self):
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.ws_connect(
+            try:
+                self.ws = await aiohttp.ClientSession().ws_connect(
                     WebSocketClient.getServerUrl(self.serverConfig),
                     headers={
                         "Service-Name": self.instance.serviceName,
                         "Hostname": self.instance.hostname,
                         "Port": str(self.instance.port),
                     },
-                ) as ws:
-                    self.ws = ws
-                    await asyncio.gather(self._listen(), self._consume())
-        except:
-            print("Exception ocurred")
+                    autoclose=True,
+                )
+                await self.eventQueue.put(self._recv())
+                while not self.ws.closed:
+                    cor = await self.eventQueue.get()
+                    asyncio.create_task(cor)
+                print(f"ws connection closed")
+            except Exception as e:
+                print(f"Exception ocurred in eventLoop:{e},now sleep 10s and loop")
+                await asyncio.sleep(10)
+        await self.ws.close()
 
-    async def _consume(self):
-        while not self.ws.closed:
-            task = None
-            try:
-                task = self.queue.get_nowait()
-                if task.type == TaskType.LOG:
-                    await self._log(task.data)
-                elif task.type == TaskType.CLOSE:
-                    await self._close()
-                elif task.type == TaskType.ROUTE:
-                    await self._route()
-                elif task.type == TaskType.CONFIG:
-                    await self._config(task.data)
-            except:
-                await asyncio.sleep(0.5)
-                continue
-
-    def getServerUrl(serverConfig: ServerConfig):
-        return "ws://{}:{}/sws".format(serverConfig.host, serverConfig.port)
-
-    async def _listen(self):
-        while not self.ws.closed:
-            try:
-                msg = await self.ws.receive()
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    dataDict = json.loads(msg.data)
-                    if dataDict["type"] == "route":
-                        self.route = dataDict["data"]
-                        print(json.dumps(self.route, indent=4))
-                    elif dataDict["type"] == "config":
-                        self.config = dataDict["data"]
-                        print(json.dumps(self.config, indent=4))
-                elif msg.type == aiohttp.WSMsgType.CLOSED:
-                    await self.ws.close()
-                    print("CLOSED")
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    print("ERROR")
-            except:
-                continue
-        print("listen loop exited")
+    async def _recv(self):
+        try:
+            msg = await self.ws.receive()
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                dataDict = json.loads(msg.data)
+                if dataDict["type"] == "route":
+                    self.route = dataDict["data"]
+                    if not self.onRouteUpdatedEvent.is_set():
+                        self.onRouteUpdatedEvent.set()
+                    print(json.dumps(self.route, indent=4))
+                elif dataDict["type"] == "config":
+                    self.config = dataDict["data"]
+                    if not self.onConfigUpdatedEvent.is_set():
+                        self.onConfigUpdatedEvent.set()
+                    print(json.dumps(self.config, indent=4))
+            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                await self.ws.close()
+                print("CLOSED")
+            elif msg.type == aiohttp.WSMsgType.ERROR:
+                print("ERROR")
+        except Exception as e:
+            print(f"Exception occurred in _recv:{e}")
+        finally:
+            if not self.ws.closed:
+                await self.eventQueue.put(self._recv())
 
     async def _log(self, data: str):
         self.cacheLog += data
-        await self.ws.send_json({"type": "log", "message": self.cacheLog})
+        try:
+            await self.ws.send_json({"type": "log", "message": self.cacheLog})
+        except Exception as e:
+            print(f"Exception occurred in _log:{e}")
         self.cacheLog = ""
 
     async def _route(self):
@@ -119,22 +169,28 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
 
     async def _close(self):
         self.running = False
-        await self.ws.close()
 
-    async def _config(self, config: str = None):
-        await self.ws.send_json({"type": "config", "config": config})
+    async def _config(self, firstKey: str = None):
+        self.onConfigUpdatedEvent.clear()
+        await self.ws.send_json({"type": "config", "config": firstKey})
 
     def stop(self):
-        self.queue.put_nowait(Task(TaskType.CLOSE))
-        self.thread.join()
+        asyncio.run_coroutine_threadsafe(self.eventQueue.put(self._close()), self.loop)
 
     def doLog(self, data: str):
-        self.queue.put_nowait(Task(type=TaskType.LOG, data=data))
+        asyncio.run_coroutine_threadsafe(
+            self.eventQueue.put(self._log(data)), self.loop
+        )
 
     def doRoute(self):
-        self.queue.put_nowait(Task(type=TaskType.ROUTE))
+        self.onRouteUpdatedEvent.clear()
+        asyncio.run_coroutine_threadsafe(self.eventQueue.put(self._route()), self.loop)
 
-    def getRoute(self) -> Dict[str, Dict[str, Union[str, int]]]:
+    def getRoute(
+        self, waitForNew: bool = False
+    ) -> dict[str, dict[str, Union[str, int]]]:
+        if waitForNew:
+            self.onRouteUpdatedEvent.wait()
         return self.route
 
     def getUrl(self, serviceName: str, withProtocol: bool = True) -> str:
@@ -143,38 +199,46 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
         hostname = services[key]["hostname"]
         port = services[key]["port"]
         if withProtocol:
-            return "http://{}:{}".format(hostname, port)
+            return f"http://{hostname}:{port}"
         else:
-            return "{}:{}".format(hostname, port)
+            return f"{hostname}:{port}"
 
     def doConfig(self, firstKey: str = None):
-        self.queue.put_nowait(Task(type=TaskType.CONFIG, data=firstKey))
+        asyncio.run_coroutine_threadsafe(
+            self.eventQueue.put(self._config(firstKey)), self.loop
+        )
 
-    def getConfig(self) -> Dict[str, Dict]:
+    def getConfig(self, waitForNew: bool = False) -> dict[str, dict]:
+        if waitForNew:
+            self.onConfigUpdatedEvent.wait()
         return self.config
 
-    def getConfigValueByKeyPath(self, keyPath: str, spliter: str = ".") -> Union[Dict, str]:
+    def getConfigValueByKeyPath(
+        self, keyPath: str, spliter: str = "."
+    ) -> Union[dict, str, None]:
         if not hasattr(self, "config"):
             return None
         paths = keyPath.split(spliter)
         c = self.config
         for path in paths:
-            if path in c and isinstance(c[path], Union[Dict, str]):
+            if path in c and isinstance(c[path], Union[dict, str]):
                 c = c[path]
             else:
                 return None
         return c
 
+    @staticmethod
+    def getServerUrl(serverConfig: ServerConfig):
+        return f"ws://{serverConfig.host}:{serverConfig.port}/sws"
+
 
 if __name__ == "__main__":
-    serverConfig = ServerConfig(host="192.168.30.61", port=3100)
-    instance = Instance(serviceName="all", hostname="192.168.30.61", port=3101)
-    wsClient = WebSocketClient(serverConfig=serverConfig, instance=instance)
-    li = LogInterceptor(wsClient)
+    import time
+
+    serverConfig = ServerConfig(host="127.0.0.1", port=3100)
+    instance = Instance(serviceName="all", hostname="127.0.0.1", port=3101)
+    c = WebSocketClient(serverConfig=serverConfig, instance=instance)
+    li = LogInterceptor(c)
     while True:
-        # print(wsClient.getConfigValueByKeyPath("base"))
         time.sleep(3)
-        # wsClient.doRoute()
-        # wsClient.doConfig()
         print(time.strftime("%H:%M:%S"))
-        # wsClient.doLog(time.strftime("%H:%M:%S") + "\n")
