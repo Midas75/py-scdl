@@ -4,13 +4,13 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 import os
 import sys
 from typing import Callable, Union, Any
+import uvicorn
 
 sys.path.append(f"{os.path.dirname(__file__)}")
 from base_model import Instance
 from persistence import IPersistence, MemoryPersistence
-
-import uvicorn
 from config_loader import ConfigLoader
+
 
 instances: dict[str, set[str]] = {}
 unique: dict[str, Instance] = {}

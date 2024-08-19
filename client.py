@@ -7,8 +7,8 @@ import asyncio
 import json
 from typing import Union, Coroutine, Any, TextIO
 
-sys.path.append(f"{os.path.dirname(__file__)}")
-from base_model import ServerConfig, Instance
+sys.path.append(f"{os.path.dirname(__file__)}/..")
+from .base_model import ServerConfig, Instance
 
 
 class ILog(ABC):

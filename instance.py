@@ -1,9 +1,9 @@
 import os
 import sys
 
-sys.path.append(f"{os.path.dirname(__file__)}")
-import base_model
-import client
+sys.path.append(f"{os.path.dirname(__file__)}/..")
+from . import base_model
+from . import client
 
 globalSCDLClient = None
 
