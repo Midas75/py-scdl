@@ -109,19 +109,21 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
         self.onLoopCreatedEvent.set()
         while self.running:
             try:
-                self.ws = await aiohttp.ClientSession().ws_connect(
-                    WebSocketClient.getServerUrl(self.serverConfig),
-                    headers={
-                        "Service-Name": self.instance.serviceName,
-                        "Hostname": self.instance.hostname,
-                        "Port": str(self.instance.port),
-                    },
-                    autoclose=True,
-                )
-                await self.eventQueue.put(self._recv())
-                while not self.ws.closed:
-                    cor = await self.eventQueue.get()
-                    asyncio.create_task(cor)
+                async with aiohttp.ClientSession() as session:
+                    async with session.ws_connect(
+                        WebSocketClient.getServerUrl(self.serverConfig),
+                        headers={
+                            "Service-Name": self.instance.serviceName,
+                            "Hostname": self.instance.hostname,
+                            "Port": str(self.instance.port),
+                        },
+                        autoclose=True,
+                    ) as ws:
+                        self.ws = ws
+                        await self.eventQueue.put(self._recv())
+                        while not self.ws.closed:
+                            cor = await self.eventQueue.get()
+                            asyncio.create_task(cor)
                 print(f"ws connection closed")
             except Exception as e:
                 print(f"Exception ocurred in eventLoop:{e},now sleep 10s and loop")
