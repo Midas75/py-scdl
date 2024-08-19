@@ -7,8 +7,10 @@ import asyncio
 import json
 from typing import Union, Coroutine, Any, TextIO
 
+import aiohttp.http_exceptions
+
 sys.path.append(f"{os.path.dirname(__file__)}/..")
-from .base_model import ServerConfig, Instance
+from base_model import ServerConfig, Instance
 
 
 class ILog(ABC):
@@ -77,11 +79,12 @@ class LogInterceptor:
 
 class WebSocketClient(Client, ILog, IRoute, IConfig):
     eventQueue: asyncio.Queue[Coroutine]
-    ws: aiohttp.ClientWebSocketResponse
+    ws: aiohttp.ClientWebSocketResponse = None
     onConfigUpdatedEvent: Event
     onRouteUpdatedEvent: Event
     onLoopCreatedEvent: Event
     loop: asyncio.AbstractEventLoop
+    session: aiohttp.ClientSession = None
 
     def __init__(
         self, serverConfig: ServerConfig, instance: Instance, getConfigNow: bool = True
@@ -99,7 +102,6 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
         self.onLoopCreatedEvent.wait()
 
         if getConfigNow:
-            self.doConfig()
             print("waiting for config load")
             self.onConfigUpdatedEvent.wait()
 
@@ -107,28 +109,34 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
         self.running = True
         self.loop = asyncio.get_event_loop()
         self.onLoopCreatedEvent.set()
+        await self.eventQueue.put(self._connect())
         while self.running:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.ws_connect(
-                        WebSocketClient.getServerUrl(self.serverConfig),
-                        headers={
-                            "Service-Name": self.instance.serviceName,
-                            "Hostname": self.instance.hostname,
-                            "Port": str(self.instance.port),
-                        },
-                        autoclose=True,
-                    ) as ws:
-                        self.ws = ws
-                        await self.eventQueue.put(self._recv())
-                        while not self.ws.closed:
-                            cor = await self.eventQueue.get()
-                            asyncio.create_task(cor)
-                print(f"ws connection closed")
-            except Exception as e:
-                print(f"Exception ocurred in eventLoop:{e},now sleep 10s and loop")
-                await asyncio.sleep(10)
-        await self.ws.close()
+            cor = await self.eventQueue.get()
+            asyncio.create_task(cor)
+
+    async def _connect(self):
+        if self.session != None:
+            await self.session.close()
+        if self.ws != None and not self.ws.closed:
+            await self.ws.close()
+        try:
+            self.session = aiohttp.ClientSession()
+            self.ws = await self.session.ws_connect(
+                WebSocketClient.getServerUrl(self.serverConfig),
+                headers={
+                    "Service-Name": self.instance.serviceName,
+                    "Hostname": self.instance.hostname,
+                    "Port": str(self.instance.port),
+                },
+                autoclose=True,
+            )
+        except Exception as e:
+            print(f"Exception ocurred in _connect:{e}, now sleep 10s and reconnect")
+            await asyncio.sleep(10)
+            await self.eventQueue.put(self._connect())
+        else:
+            await self.eventQueue.put(self._recv())
+            self.doConfig()
 
     async def _recv(self):
         try:
@@ -145,16 +153,14 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
                     if not self.onConfigUpdatedEvent.is_set():
                         self.onConfigUpdatedEvent.set()
                     print(json.dumps(self.config, indent=4))
-            elif msg.type == aiohttp.WSMsgType.CLOSED:
-                await self.ws.close()
-                print("CLOSED")
             elif msg.type == aiohttp.WSMsgType.ERROR:
-                print("ERROR")
+                raise Exception("ERROR")
+            elif msg.type == aiohttp.WSMsgType.CLOSE:
+                raise Exception("CLOSE")
+            await self.eventQueue.put(self._recv())
         except Exception as e:
             print(f"Exception occurred in _recv:{e}")
-        finally:
-            if not self.ws.closed:
-                await self.eventQueue.put(self._recv())
+            await self.eventQueue.put(self._connect())
 
     async def _log(self, data: str):
         self.cacheLog += data

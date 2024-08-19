@@ -70,7 +70,6 @@ async def config(instance: Instance, body: dict, websocket: WebSocket) -> None:
         payload["data"][body["config"]] = configLoader.config[body["config"]]
     else:
         payload["data"] = configLoader.config
-    print(payload)
     await websocket.send_json(payload)
 
 
