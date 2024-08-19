@@ -6,6 +6,7 @@ from . import base_model
 from . import client
 
 globalSCDLClient = None
+inited = False
 
 
 def init(
@@ -16,6 +17,10 @@ def init(
     serverPort: int = 3100,
 ):
     global globalSCDLClient
+    global inited
+    if inited:
+        return
+    inited = True
     globalSCDLClient = client.WebSocketClient(
         base_model.ServerConfig(host=serverAddress, port=serverPort),
         base_model.Instance(
