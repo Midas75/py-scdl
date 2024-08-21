@@ -23,8 +23,8 @@
                 mode: "text"
             }
         })
-        function listConfig() {
-            fetch("/config/list")
+        async function listConfig() {
+            return await fetch("/config/list")
                 .then(async response => {
                     let data = (await response.json()).data
                     let select = document.getElementById("configs")
@@ -46,7 +46,7 @@
                 .then(async response => {
                     let data = (await response.json()).data
                     let copyData = JSON.parse(JSON.stringify(data))
-                    editor.update({ json: copyData })
+                    await editor.update({ json: copyData })
                 })
         }
         document.getElementById("configs").addEventListener("change", (e) => {
@@ -55,8 +55,8 @@
         document.getElementById("reload").addEventListener("click", (e) => {
             fetch("/config/reload")
                 .then(async response => {
-                    alert(`reload:${(await response.json()).msg}`)
                     await listConfig()
+                    alert(`reload:${(await response.json()).msg}`)
                 })
         })
         document.getElementById("save").addEventListener("click", (e) => {
