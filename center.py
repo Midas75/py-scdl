@@ -5,11 +5,13 @@ import os
 import sys
 from typing import Callable, Union, Any
 import uvicorn
+import asyncio
 
 sys.path.append(f"{os.path.dirname(__file__)}")
-from base_model import Instance
+from base_model import Instance, ServerConfig
 from persistence import IPersistence, MemoryPersistence
 from config_loader import ConfigLoader
+from client import WebSocketClient, LogInterceptor
 
 
 class PySCDLCenter:
@@ -141,4 +143,11 @@ class PySCDLCenter:
 
 
 if __name__ == "__main__":
+
+    c = WebSocketClient(
+        ServerConfig(host="127.0.0.1", port=3100),
+        Instance(serviceName="ConfigCenter", hostname="127.0.0.1", port=3100),
+        getConfigNow=False,
+    )
+    li = LogInterceptor(c)
     uvicorn.Server(PySCDLCenter().serverConfig).run()

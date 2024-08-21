@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <link href="./xterm/xterm.min.css" rel="stylesheet">
 </head>
 
 <body>
@@ -11,12 +12,15 @@
     <button id="getLog" style="visibility: hidden;">get</button> -->
     <label> <input type="checkbox" id="auto" /> AutoLogPer5s </label>
     <div id="buttons"></div>
+    <script src="./xterm/xterm.min.js"></script>
     <script>
         let containers = []
         let services = []
+        let terms = []
         function renderLogItem(number) {
             for (let i = 0; i < number; i++) {
                 let container = document.createElement("div")
+
                 container.id = `contaner-${i}`
                 container.style = "display: inline-block;"
                 container.dataset.id = i
@@ -38,25 +42,45 @@
                     getLog(containers[parseInt(e.target.dataset.id)].select.value, e.target.dataset.id)
                 })
                 let log = document.createElement("div")
-                log.style = "overflow: scroll;border: solid;height: 45vh;width:45vw;white-space: pre;"
                 log.id = `log-${i}`
                 log.dataset.id = i
+                log.style = "border: solid;height: 45vh;width:45vw;white-space: pre;"
                 container.append(select, refresh, log)
                 document.body.appendChild(container)
+                let computedStyle = window.getComputedStyle(log)
+                let fontSize = computedStyle.getPropertyValue('font-size')
+                let tempElement = document.createElement('span')
+                tempElement.textContent = 'X'
+                tempElement.style.visibility = 'hidden'
+                log.appendChild(tempElement)
+                let charWidth = tempElement.offsetWidth
+                let charHeight = tempElement.offsetHeight
+                log.removeChild(tempElement)
+                const terminalWidth = log.offsetWidth;
+                const terminalHeight = log.offsetHeight*1.2;
+                let term = new Terminal()
+                term.open(log)
+                term.resize(parseInt(terminalWidth / charWidth), parseInt(terminalHeight / charHeight));
                 containers.push({
                     container: container,
                     select: select,
                     refresh: refresh,
-                    log: log
+                    log: log,
+                    term: term
                 })
+
             }
         }
         function getLog(uid, i) {
             i = parseInt(i)
             fetch(`/log/${uid}`)
                 .then(async response => {
-                    let log = (await response.json()).data.replace(/\n/g, "<br>")
-                    containers[i].log.innerHTML = log
+                    let log = (await response.json()).data
+                    // log = log.replace(/\n/g, "<br>")
+                    log = log.replace(/\n/g, "\r\n")
+                    // containers[i].log.innerHTML = log
+                    containers[i].term.reset()
+                    containers[i].term.write(log)
                     containers[i].log.scrollTop = containers[i].log.scrollHeight
                 })
         }

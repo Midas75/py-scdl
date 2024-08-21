@@ -76,6 +76,9 @@ class LogInterceptor:
     def flush(self) -> None:
         return self.original_stdout.flush()
 
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.original_stdout, name)
+
 
 class WebSocketClient(Client, ILog, IRoute, IConfig):
     eventQueue: asyncio.Queue[Coroutine]
@@ -167,8 +170,10 @@ class WebSocketClient(Client, ILog, IRoute, IConfig):
         try:
             await self.ws.send_json({"type": "log", "message": self.cacheLog})
         except Exception as e:
-            print(f"Exception occurred in _log:{e}")
-        self.cacheLog = ""
+            pass
+            # print(f"Exception occurred in _log:{e}")
+        else:
+            self.cacheLog = ""
 
     async def _route(self):
         await self.ws.send_json({"type": "route"})
