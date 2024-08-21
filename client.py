@@ -9,7 +9,7 @@ from typing import Union, Coroutine, Any, TextIO
 
 import aiohttp.http_exceptions
 
-sys.path.append(f"{os.path.dirname(__file__)}/..")
+sys.path.append(f"{os.path.dirname(__file__)}")
 from base_model import ServerConfig, Instance
 
 

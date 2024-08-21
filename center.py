@@ -17,7 +17,13 @@ class PySCDLCenter:
         self.instances = dict[str, set[str]]()
         self.unique = dict[str, Instance]()
         self.wsInstance = dict[str, WebSocket]()
-        self.serverConfig = uvicorn.Config(app=FastAPI(),host=host,port=port)
+        self.serverConfig = uvicorn.Config(
+            app=FastAPI(),
+            host=host,
+            port=port,
+            ws_ping_interval=None,
+            ws_ping_timeout=None,
+        )
         self.serverConfig.app.mount(
             "/static",
             StaticFiles(directory=f"{os.path.dirname(__file__)}/static"),
